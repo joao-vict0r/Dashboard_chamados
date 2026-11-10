@@ -104,7 +104,7 @@ main {
 
 .week-panel {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 12px 24px;
   margin-bottom: 16px;
@@ -136,7 +136,7 @@ main {
   font-weight: 700;
 }
 
-.week-filter small, .week-import small {
+.week-filter small {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.5;
@@ -144,55 +144,6 @@ main {
 
 .print-week-heading {
   display: none;
-}
-
-.week-import {
-  display: grid;
-  justify-items: end;
-  gap: 7px;
-}
-
-.import-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.button {
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  padding: 9px 13px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background .2s ease, transform .2s ease;
-}
-
-.button-primary {
-  background: var(--navy-soft);
-  color: white;
-}
-
-.button-primary:hover {
-  background: #315f87;
-  transform: translateY(-1px);
-}
-
-.button-secondary {
-  border-color: #dce3ea;
-  background: white;
-  color: #52657a;
-}
-
-.button-secondary:hover {
-  background: #f0f4f7;
-  transform: translateY(-1px);
 }
 
 .import-status {
@@ -608,13 +559,6 @@ footer {
     grid-template-columns: 1fr;
   }
 
-  .week-import {
-    justify-items: start;
-  }
-
-  .import-actions {
-    justify-content: flex-start;
-  }
 }
 
 @media(max-width: 450px) {
@@ -654,15 +598,6 @@ footer {
 
   .week-filter label {
     grid-column: auto;
-  }
-
-  .import-actions {
-    width: 100%;
-    flex-direction: column;
-  }
-
-  .import-actions .button {
-    width: 100%;
   }
 
   .controls {
@@ -726,7 +661,6 @@ footer {
   .week-filter label,
   .week-filter select,
   .week-filter small,
-  .week-import,
   .import-status,
   .controls,
   .export-note {

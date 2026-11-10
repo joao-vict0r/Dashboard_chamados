@@ -1,17 +1,25 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const { spawn } = require("node:child_process");
+const { randomBytes, timingSafeEqual } = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 
 const PORT = Number(process.env.PORT || 3000);
-const MAX_CSV_BYTES = 5 * 1024 * 1024;
-const MAX_IMPORT_ROWS = 10000;
 const INITIAL_WEEK_DATE = "2026-09-01";
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 5;
 const STATIC_FILES = {
   "/": ["index.html", "text/html; charset=utf-8"],
   "/index.html": ["index.html", "text/html; charset=utf-8"],
   "/style.css": ["style.css", "text/css; charset=utf-8"],
-  "/script.js": ["script.js", "text/javascript; charset=utf-8"]
+  "/script.js": ["script.js", "text/javascript; charset=utf-8"],
+  "/admin": ["admin.html", "text/html; charset=utf-8"],
+  "/admin.html": ["admin.html", "text/html; charset=utf-8"],
+  "/admin.css": ["admin.css", "text/css; charset=utf-8"],
+  "/admin.js": ["admin.js", "text/javascript; charset=utf-8"]
 };
 
 const initialTickets = [
@@ -40,170 +48,6 @@ function weekStartForDate(value) {
   const day = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() - day + 1);
   return date.toISOString().slice(0, 10);
-}
-
-function normalizeHeader(value) {
-  return value
-    .replace(/^\uFEFF/, "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function splitCsvRow(line, delimiter) {
-  const values = [];
-  let value = "";
-  let quoted = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === delimiter && !quoted) {
-      values.push(value);
-      value = "";
-    } else {
-      value += character;
-    }
-  }
-
-  if (quoted) {
-    throw new Error("CSV inválido: há um campo com aspas sem fechamento.");
-  }
-
-  values.push(value);
-  return values;
-}
-
-function parseCsvRows(text, delimiter) {
-  const rows = [];
-  let row = [];
-  let value = "";
-  let quoted = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-
-    if (character === '"') {
-      if (quoted && text[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === delimiter && !quoted) {
-      row.push(value);
-      value = "";
-    } else if ((character === "\n" || character === "\r") && !quoted) {
-      row.push(value);
-      if (row.some(cell => cell.trim())) rows.push(row);
-      row = [];
-      value = "";
-      if (character === "\r" && text[index + 1] === "\n") index += 1;
-    } else {
-      value += character;
-    }
-  }
-
-  if (quoted) {
-    throw new Error("CSV inválido: há um campo com aspas sem fechamento.");
-  }
-
-  row.push(value);
-  if (row.some(cell => cell.trim())) rows.push(row);
-  return rows;
-}
-
-function parseCsv(text) {
-  const content = text.replace(/^\uFEFF/, "");
-  const firstLine = content.split(/\r\n|\n|\r/, 1)[0];
-  if (!firstLine.trim()) {
-    throw new Error("O CSV precisa ter um cabeçalho e pelo menos um chamado.");
-  }
-
-  const semicolons = splitCsvRow(firstLine, ";").length;
-  const commas = splitCsvRow(firstLine, ",").length;
-  const delimiter = semicolons > commas ? ";" : ",";
-  const rows = parseCsvRows(content, delimiter);
-  if (rows.length < 2) {
-    throw new Error("O CSV precisa ter um cabeçalho e pelo menos um chamado.");
-  }
-
-  const headers = rows[0].map(normalizeHeader);
-  const findColumn = (...aliases) => headers.findIndex(header => aliases.includes(header));
-  const columns = {
-    id: findColumn("chamado", "numerodochamado", "id", "ticket", "ticketid"),
-    description: findColumn("descricao", "descricaodochamado", "description"),
-    theme: findColumn("tema", "theme", "assunto"),
-    journey: findColumn("jornada", "journey"),
-    date: findColumn("data", "datadochamado", "dataabertura", "dataatendimento", "openedat")
-  };
-  const missing = Object.entries(columns)
-    .filter(([, index]) => index === -1)
-    .map(([name]) => ({ id: "Chamado", description: "Descrição", theme: "Tema", journey: "Jornada", date: "Data" })[name]);
-
-  if (missing.length) {
-    throw new Error(`Faltam colunas obrigatórias no CSV: ${missing.join(", ")}.`);
-  }
-
-  if (rows.length - 1 > MAX_IMPORT_ROWS) {
-    throw new Error(`O limite por importação é de ${MAX_IMPORT_ROWS} chamados.`);
-  }
-
-  const records = [];
-  const seen = new Set();
-
-  for (let index = 1; index < rows.length; index += 1) {
-    const values = rows[index];
-    const read = column => (values[column] || "").trim();
-    const ticketId = read(columns.id);
-    const description = read(columns.description);
-    const theme = read(columns.theme);
-    const journey = read(columns.journey);
-    const rawDate = read(columns.date);
-    const rowNumber = index + 1;
-
-    if (!/^\d+$/.test(ticketId)) {
-      throw new Error(`Linha ${rowNumber}: o número do chamado deve conter apenas dígitos.`);
-    }
-
-    const date = normalizeDate(rawDate);
-    if (!date) {
-      throw new Error(`Linha ${rowNumber}: data inválida "${rawDate}". Use AAAA-MM-DD ou DD/MM/AAAA.`);
-    }
-
-    if (!description || !theme || !journey) {
-      throw new Error(`Linha ${rowNumber}: descrição, tema e jornada são obrigatórios.`);
-    }
-
-    const weekStart = weekStartForDate(date);
-    const key = `${ticketId}:${weekStart}`;
-    if (seen.has(key)) {
-      throw new Error(`Linha ${rowNumber}: o chamado ${ticketId} aparece mais de uma vez na mesma semana.`);
-    }
-    seen.add(key);
-    records.push({ ticketId, description, theme, journey, date, weekStart });
-  }
-
-  return records;
-}
-
-function normalizeDate(value) {
-  let isoDate = value;
-  const localDate = /^(\d{2})[/-](\d{2})[/-](\d{4})$/.exec(value);
-
-  if (localDate) {
-    isoDate = `${localDate[3]}-${localDate[2]}-${localDate[1]}`;
-  }
-
-  return isValidDate(isoDate) ? isoDate : null;
 }
 
 function createDatabase(databasePath) {
@@ -264,32 +108,295 @@ function sendJson(response, status, data) {
   response.end(JSON.stringify(data));
 }
 
-function readRequestBody(request) {
+function getClientAddress(request) {
+  const address = request.socket.remoteAddress || "";
+  return address.startsWith("::ffff:") ? address.slice(7) : address;
+}
+
+function isLocalClient(request) {
+  const address = getClientAddress(request);
+  return address === "::1" || address === "127.0.0.1";
+}
+
+function hasSameOrigin(request) {
+  const origin = request.headers.origin;
+  if (!origin || !request.headers.host) return false;
+  try {
+    const parsed = new URL(origin);
+    const requestUrl = new URL(`http://${request.headers.host}`);
+    const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
+    return parsed.protocol === "http:"
+      && parsed.host === request.headers.host
+      && loopbackHosts.has(requestUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function parseCookies(header = "") {
+  return Object.fromEntries(header.split(";").map(part => {
+    const separator = part.indexOf("=");
+    if (separator < 0) return ["", ""];
+    return [part.slice(0, separator).trim(), part.slice(separator + 1).trim()];
+  }).filter(([name]) => name));
+}
+
+function getSession(request, sessions) {
+  const token = parseCookies(request.headers.cookie).admin_session;
+  const session = token && sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  return token;
+}
+
+function readRequestBody(request, maxBytes) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    let exceededLimit = false;
-
+    let tooLarge = false;
     request.on("data", chunk => {
       size += chunk.length;
-      if (size > MAX_CSV_BYTES) exceededLimit = true;
-      else if (!exceededLimit) chunks.push(chunk);
+      if (size > maxBytes) {
+        tooLarge = true;
+        chunks.length = 0;
+        request.resume();
+      } else if (!tooLarge) {
+        chunks.push(chunk);
+      }
     });
-
     request.on("end", () => {
-      if (exceededLimit) reject(new Error("O arquivo CSV ultrapassa o limite de 5 MB."));
-      else resolve(Buffer.concat(chunks).toString("utf8"));
+      if (tooLarge) {
+        const error = new Error(`O limite por arquivo é de ${maxBytes / 1024 / 1024} MB.`);
+        error.status = 413;
+        reject(error);
+      } else {
+        resolve(Buffer.concat(chunks));
+      }
     });
     request.on("error", reject);
   });
 }
 
+function runSpreadsheetParser(fileName, content) {
+  return new Promise((resolve, reject) => {
+    const python = process.env.PYTHON || "python";
+    const child = spawn(python, [
+      path.join(__dirname, "spreadsheet_import.py"),
+      "--json",
+      fileName
+    ], {
+      windowsHide: true,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", chunk => { stdout += chunk; });
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.on("error", error => {
+      if (error.code === "ENOENT") {
+        reject(new Error("Python não foi encontrado. Instale o Python e configure PYTHON, se necessário."));
+      } else {
+        reject(new Error("Não foi possível iniciar o validador de planilhas."));
+      }
+    });
+    child.on("close", code => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || "A planilha não passou na validação."));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        reject(new Error("O validador retornou dados inválidos."));
+      }
+    });
+    child.stdin.on("error", error => {
+      if (error.code !== "EPIPE") reject(new Error("Não foi possível enviar a planilha ao validador."));
+    });
+    child.stdin.end(content);
+  });
+}
+
+function isValidImportedRecord(record) {
+  return record && typeof record === "object"
+    && /^[0-9]+$/.test(record.ticket_id)
+    && typeof record.description === "string" && record.description.length > 0
+    && typeof record.theme === "string" && record.theme.length > 0
+    && typeof record.journey === "string" && record.journey.length > 0
+    && isValidDate(record.opened_at)
+    && isValidDate(record.week_start)
+    && weekStartForDate(record.opened_at) === record.week_start;
+}
+
 function createAppServer(options = {}) {
   const databasePath = options.databasePath || path.join(__dirname, "data", "chamados.sqlite3");
   const database = createDatabase(databasePath);
+  const adminPassword = options.adminPassword ?? process.env.ADMIN_PASSWORD ?? "";
+  const adminConfigured = adminPassword.length >= 12;
+  const sessions = new Map();
+  const loginAttempts = new Map();
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
+
+    if (url.pathname.startsWith("/api/admin/") && !isLocalClient(request)) {
+      sendJson(response, 403, { error: "A área administrativa só aceita conexões locais." });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/admin/session") {
+      sendJson(response, 200, {
+        configured: adminConfigured,
+        authenticated: adminConfigured && Boolean(getSession(request, sessions))
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/login") {
+      if (!hasSameOrigin(request)) {
+        sendJson(response, 403, { error: "Origem da solicitação não autorizada." });
+        return;
+      }
+      if (!adminConfigured) {
+        sendJson(response, 503, { error: "Configure ADMIN_PASSWORD com pelo menos 12 caracteres antes de usar a área administrativa." });
+        return;
+      }
+
+      const address = getClientAddress(request);
+      const now = Date.now();
+      const attempt = loginAttempts.get(address);
+      if (attempt && attempt.windowEndsAt > now && attempt.count >= MAX_LOGIN_ATTEMPTS) {
+        response.setHeader("Retry-After", Math.ceil((attempt.windowEndsAt - now) / 1000));
+        sendJson(response, 429, { error: "Muitas tentativas de acesso. Aguarde 15 minutos e tente novamente." });
+        return;
+      }
+
+      try {
+        const body = await readRequestBody(request, 8 * 1024);
+        const credentials = JSON.parse(body.toString("utf8"));
+        const provided = typeof credentials.password === "string" ? credentials.password : "";
+        const expectedBytes = Buffer.from(adminPassword);
+        const providedBytes = Buffer.from(provided);
+        const passwordMatches = expectedBytes.length === providedBytes.length
+          && timingSafeEqual(expectedBytes, providedBytes);
+
+        if (!passwordMatches) {
+          const current = attempt && attempt.windowEndsAt > now
+            ? attempt
+            : { count: 0, windowEndsAt: now + LOGIN_WINDOW_MS };
+          current.count += 1;
+          loginAttempts.set(address, current);
+          sendJson(response, 401, { error: "Senha incorreta." });
+          return;
+        }
+
+        loginAttempts.delete(address);
+        const token = randomBytes(32).toString("hex");
+        sessions.set(token, { expiresAt: now + SESSION_DURATION_MS });
+        response.setHeader("Set-Cookie", [
+          `admin_session=${token}`,
+          "HttpOnly",
+          "SameSite=Strict",
+          "Path=/",
+          `Max-Age=${SESSION_DURATION_MS / 1000}`
+        ].join("; "));
+        sendJson(response, 200, { authenticated: true });
+      } catch (error) {
+        sendJson(response, error.status || 400, { error: error.status ? error.message : "Solicitação de login inválida." });
+      }
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/logout") {
+      if (!hasSameOrigin(request)) {
+        sendJson(response, 403, { error: "Origem da solicitação não autorizada." });
+        return;
+      }
+      const token = getSession(request, sessions);
+      if (token) sessions.delete(token);
+      response.setHeader("Set-Cookie", "admin_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
+      sendJson(response, 200, { authenticated: false });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/import") {
+      if (!hasSameOrigin(request)) {
+        sendJson(response, 403, { error: "Origem da solicitação não autorizada." });
+        return;
+      }
+      if (!adminConfigured || !getSession(request, sessions)) {
+        sendJson(response, 401, { error: "Entre na área administrativa antes de importar." });
+        return;
+      }
+
+      try {
+        let fileName;
+        try {
+          fileName = decodeURIComponent(request.headers["x-file-name"] || "");
+        } catch {
+          sendJson(response, 400, { error: "Nome de arquivo inválido." });
+          return;
+        }
+        if (path.basename(fileName) !== fileName || ![".csv", ".xlsx"].includes(path.extname(fileName).toLowerCase())) {
+          sendJson(response, 400, { error: "Envie uma planilha .xlsx ou um arquivo .csv." });
+          return;
+        }
+
+        const content = await readRequestBody(request, MAX_UPLOAD_BYTES);
+        const records = await runSpreadsheetParser(fileName, content);
+        if (!Array.isArray(records) || records.length === 0 || !records.every(isValidImportedRecord)) {
+          sendJson(response, 400, { error: "A planilha contém registros inválidos." });
+          return;
+        }
+
+        const existing = database.prepare(
+          "SELECT 1 FROM tickets WHERE ticket_id = ? AND week_start = ?"
+        );
+        const upsert = database.prepare(`
+          INSERT INTO tickets (ticket_id, description, theme, journey, opened_at, week_start)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT (ticket_id, week_start) DO UPDATE SET
+            description = excluded.description,
+            theme = excluded.theme,
+            journey = excluded.journey,
+            opened_at = excluded.opened_at,
+            imported_at = CURRENT_TIMESTAMP
+        `);
+        let added = 0;
+        let updated = 0;
+        const weeks = new Set(records.map(record => record.week_start));
+        withTransaction(database, () => {
+          for (const record of records) {
+            if (existing.get(record.ticket_id, record.week_start)) updated += 1;
+            else added += 1;
+            upsert.run(
+              record.ticket_id,
+              record.description,
+              record.theme,
+              record.journey,
+              record.opened_at,
+              record.week_start
+            );
+          }
+        });
+
+        sendJson(response, 200, { added, updated, weeks: weeks.size });
+      } catch (error) {
+        if (error.status) {
+          sendJson(response, error.status, { error: error.message });
+        } else {
+          console.error("Falha ao importar planilha:", error);
+          sendJson(response, 400, { error: error.message || "Não foi possível importar a planilha." });
+        }
+      }
+      return;
+    }
 
     if (request.method === "GET" && url.pathname === "/api/weeks") {
       const weeks = database.prepare(`
@@ -348,60 +455,6 @@ function createAppServer(options = {}) {
       return;
     }
 
-    if (request.method === "POST" && url.pathname === "/api/import") {
-      try {
-        const contentType = request.headers["content-type"] || "";
-        if (!contentType.toLowerCase().includes("text/csv")) {
-          sendJson(response, 415, { error: "Envie o arquivo como CSV (text/csv)." });
-          return;
-        }
-
-        const records = parseCsv(await readRequestBody(request));
-        const findExisting = database.prepare(
-          "SELECT 1 FROM tickets WHERE ticket_id = ? AND week_start = ?"
-        );
-        const insert = database.prepare(`
-          INSERT INTO tickets (ticket_id, description, theme, journey, opened_at, week_start)
-          VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT(ticket_id, week_start) DO UPDATE SET
-            description = excluded.description,
-            theme = excluded.theme,
-            journey = excluded.journey,
-            opened_at = excluded.opened_at,
-            imported_at = CURRENT_TIMESTAMP
-        `);
-        let added = 0;
-        let updated = 0;
-
-        withTransaction(database, () => {
-          for (const record of records) {
-            if (findExisting.get(record.ticketId, record.weekStart)) {
-              updated += 1;
-            } else {
-              added += 1;
-            }
-            insert.run(
-              record.ticketId,
-              record.description,
-              record.theme,
-              record.journey,
-              record.date,
-              record.weekStart
-            );
-          }
-        });
-
-        sendJson(response, 200, { imported: records.length, added, updated });
-      } catch (error) {
-        if (error.message.includes("5 MB")) {
-          sendJson(response, 413, { error: error.message });
-          return;
-        }
-        sendJson(response, 400, { error: error.message || "Não foi possível importar o CSV." });
-      }
-      return;
-    }
-
     if (request.method === "GET" && STATIC_FILES[url.pathname]) {
       const [fileName, contentType] = STATIC_FILES[url.pathname];
       let contents;
@@ -416,7 +469,9 @@ function createAppServer(options = {}) {
       response.writeHead(200, {
         "Content-Type": contentType,
         "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-cache"
+        "Cache-Control": "no-cache",
+        "Content-Security-Policy": "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        ...(url.pathname.startsWith("/admin") ? { "X-Robots-Tag": "noindex, nofollow" } : {})
       });
       response.end(contents);
       return;
@@ -443,4 +498,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createAppServer, parseCsv, weekStartForDate };
+module.exports = { createAppServer, weekStartForDate };

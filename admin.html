@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Administração | Paytrack</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header class="admin-header">
+    <a class="brand" href="/">PAYTRACK <span>· PAINEL ADMINISTRATIVO</span></a>
+    <a class="back-link" href="/">Voltar ao dashboard</a>
+  </header>
+
+  <main class="admin-main">
+    <section class="admin-card">
+      <p class="eyebrow">ACESSO RESTRITO</p>
+      <h1>Atualizar chamados</h1>
+      <p class="intro">Entre com sua senha para importar uma planilha para o banco semanal.</p>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <form id="login-form" class="form" hidden>
+        <label for="password">Senha administrativa</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Entrar</button>
+      </form>
+
+      <section id="upload-panel" hidden>
+        <div class="signed-in">
+          <span class="signed-in-dot"></span>
+          Sessão administrativa ativa
+          <button id="logout-button" class="logout-button" type="button">Sair</button>
+        </div>
+
+        <form id="upload-form" class="upload-form">
+          <label for="spreadsheet">Planilha da semana</label>
+          <input id="spreadsheet" name="spreadsheet" type="file" accept=".xlsx,.csv" required>
+          <button id="upload-button" type="submit">Validar e atualizar banco</button>
+        </form>
+
+        <div class="requirements">
+          <h2>Formato esperado</h2>
+          <p>Excel <code>.xlsx</code> ou CSV em UTF-8. Cabeçalhos obrigatórios:</p>
+          <p class="column-list">Chamado · Descrição · Tema · Jornada · Data</p>
+          <p>Datas: <code>DD/MM/AAAA</code> ou <code>AAAA-MM-DD</code>. Chamados repetidos na mesma semana são atualizados; as outras semanas são preservadas.</p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="admin.js" defer></script>
+</body>
+</html>

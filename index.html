@@ -24,7 +24,7 @@
 
 <main>
 
-<section class="week-panel" aria-label="Filtro semanal e importação">
+<section class="week-panel" aria-label="Filtro semanal">
   <div class="week-filter">
     <label for="week-filter">SEMANA ISO</label>
     <select id="week-filter" disabled>
@@ -32,14 +32,6 @@
     </select>
     <small>De segunda a domingo</small>
     <strong id="print-week-heading" class="print-week-heading"></strong>
-  </div>
-  <div class="week-import">
-    <div class="import-actions">
-      <label class="button button-primary" for="arquivo-csv">Importar CSV semanal</label>
-      <input id="arquivo-csv" type="file" accept=".csv,text/csv" hidden>
-      <button id="btn-csv-template" class="button button-secondary" type="button">Baixar modelo CSV</button>
-    </div>
-    <small>Colunas obrigatórias: Chamado, Descrição, Tema, Jornada e Data.</small>
   </div>
   <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
 </section>
@@ -117,7 +109,7 @@
   <span class="result-count" id="resultado-count" aria-live="polite"></span>
 
 </div>
-<p class="export-note">No Planilhas Google, use Arquivo &gt; Importar &gt; Fazer upload e selecione o .xlsx. O resumo, as cores e as abas são preservados.</p>
+<p class="export-note">No Planilhas Google, use Arquivo &gt; Importar &gt; Fazer upload para abrir a planilha formatada.</p>
 
 <div class="table-wrap">
 

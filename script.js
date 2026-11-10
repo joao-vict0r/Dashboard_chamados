@@ -211,40 +211,6 @@ function render() {
     `${filtrados.length} ${filtrados.length === 1 ? "chamado" : "chamados"}`;
 }
 
-function criarCsv(linhas) {
-  return "\uFEFF" + linhas.map(linha =>
-    linha.map(valor => `"${String(valor).replace(/"/g, '""')}"`).join(";")
-  ).join("\r\n");
-}
-
-function baixarModeloCsv() {
-  const modelo = criarCsv([["Chamado", "Descrição", "Tema", "Jornada", "Data"]]);
-  baixarArquivo(new Blob([modelo], { type: "text/csv;charset=utf-8" }), "modelo_chamados_semanal.csv");
-}
-
-async function importarCsv(event) {
-  const arquivo = event.target.files[0];
-  if (!arquivo) return;
-
-  try {
-    mostrarStatus("Validando e importando os chamados...", "success");
-    const resultado = await obterJson("/api/import", {
-      method: "POST",
-      headers: { "Content-Type": "text/csv; charset=utf-8" },
-      body: await arquivo.text()
-    });
-    mostrarStatus(
-      `Importação concluída: ${resultado.added} novos, ${resultado.updated} atualizados. Histórico semanal mantido.`,
-      "success"
-    );
-    await carregarSemanas();
-  } catch (error) {
-    mostrarStatus(error.message, "error");
-  } finally {
-    event.target.value = "";
-  }
-}
-
 function escaparXml(valor) {
   return String(valor)
     .replace(/&/g, "&amp;")
@@ -583,8 +549,6 @@ document.getElementById("filtro").addEventListener("change", render);
 document.getElementById("week-filter").addEventListener("change", event => {
   carregarSemana(event.target.value).catch(error => mostrarStatus(error.message, "error"));
 });
-document.getElementById("arquivo-csv").addEventListener("change", importarCsv);
-document.getElementById("btn-csv-template").addEventListener("click", baixarModeloCsv);
 document.getElementById("btn-exportar-excel").addEventListener("click", exportarExcel);
 document.getElementById("btn-exportar-pdf").addEventListener("click", exportarPdf);
 

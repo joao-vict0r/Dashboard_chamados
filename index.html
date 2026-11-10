@@ -4,222 +4,152 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paytrack | Dashboard de Dúvidas</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#f3f6fa;color:#183047;font-family:Arial,sans-serif}
-header{background:#123451;color:white;padding:30px 6%}
-header small{color:#9cc9e9;font-weight:bold;letter-spacing:2px}
-header h1{margin:15px 0 8px;font-size:30px}
-header p{color:#d2e2ef}
-main{max-width:1200px;margin:30px auto;padding:0 20px}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.card{background:white;border:1px solid #e2e9f0;border-radius:12px;padding:20px;box-shadow:0 3px 12px #17324d08}
-.label{font-size:12px;color:#718096;font-weight:bold}
-.value{font-size:29px;font-weight:bold;margin:12px 0;color:#245c91}
-h2{font-size:19px;margin:30px 0 15px}
-.charts{display:grid;grid-template-columns:1.3fr .7fr;gap:16px}
-.bar{margin:22px 0}
-.bar-title{display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px}
-.track{height:13px;background:#edf1f5;border-radius:20px;overflow:hidden}
-.fill{height:100%;border-radius:20px}
-.insights{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.insight{border-left:4px solid #2879bd}
-.insight p{font-size:13px;color:#66788a;line-height:1.6}
-table{width:100%;border-collapse:collapse;min-width:700px}
-th,td{padding:13px;text-align:left;border-bottom:1px solid #e9edf2;font-size:12px}
-th{background:#f5f8fb;color:#53677b}
-a{color:#2167a8;font-weight:bold;text-decoration:none}
-a:hover{text-decoration:underline}
-.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px}
-input,select,button{padding:11px;border:1px solid #dce4ec;border-radius:7px}
-button{background:#173f60;color:white;cursor:pointer}
-.table-wrap{overflow-x:auto;background:white;border-radius:12px}
-.note{font-size:11px;color:#8493a3;margin:15px 0}
-footer{text-align:center;color:#8291a0;padding:30px;font-size:11px}
-@media(max-width:800px){
-.grid{grid-template-columns:repeat(2,1fr)}
-.charts,.insights{grid-template-columns:1fr}
-}
-@media(max-width:450px){.grid{grid-template-columns:1fr}}
-</style>
+<title>Paytrack | Dashboard Executivo</title>
+
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
 <header>
-<small>PAYTRACK | VISÃO DE PRODUTO</small>
-<h1>Dashboard de dúvidas e ofensores</h1>
-<p>Análise dos principais temas que geram dúvidas na jornada do usuário.</p>
+  <div class="header-content">
+    <div>
+      <small>PAYTRACK | INTELIGÊNCIA DE PRODUTO</small>
+      <h1>Dashboard de dúvidas e ofensores</h1>
+      <p>Análise executiva dos principais temas que geram dúvidas na jornada do usuário.</p>
+    </div>
+    <div class="header-badge">RELATÓRIO EXECUTIVO</div>
+  </div>
 </header>
 
 <main>
 
+<section class="week-panel" aria-label="Filtro semanal e importação">
+  <div class="week-filter">
+    <label for="week-filter">SEMANA ISO</label>
+    <select id="week-filter" disabled>
+      <option>Carregando semanas...</option>
+    </select>
+    <small>De segunda a domingo</small>
+    <strong id="print-week-heading" class="print-week-heading"></strong>
+  </div>
+  <div class="week-import">
+    <div class="import-actions">
+      <label class="button button-primary" for="arquivo-csv">Importar CSV semanal</label>
+      <input id="arquivo-csv" type="file" accept=".csv,text/csv" hidden>
+      <button id="btn-csv-template" class="button button-secondary" type="button">Baixar modelo CSV</button>
+    </div>
+    <small>Colunas obrigatórias: Chamado, Descrição, Tema, Jornada e Data.</small>
+  </div>
+  <p id="import-status" class="import-status" role="status" aria-live="polite"></p>
+</section>
+
 <section class="grid">
-<div class="card">
-<div class="label">CHAMADOS ANALISADOS</div>
-<div class="value">9</div>
-<small>Base selecionada</small>
-</div>
-<div class="card">
-<div class="label">MAIOR OFENSOR</div>
-<div class="value" style="font-size:20px">Criação de despesas</div>
-<small>3 chamados</small>
-</div>
-<div class="card">
-<div class="label">TEMAS MAPEADOS</div>
-<div class="value">4</div>
-<small>Grupos de dúvidas</small>
-</div>
-<div class="card">
-<div class="label">TIPO DE DEMANDA</div>
-<div class="value">100%</div>
-<small>Dúvidas na amostra</small>
-</div>
+
+  <div class="card">
+    <div class="label">CHAMADOS ANALISADOS</div>
+    <div class="value" id="stat-count">—</div>
+    <small>Na semana selecionada</small>
+  </div>
+
+  <div class="card">
+    <div class="label">MAIOR OFENSOR</div>
+    <div class="value stat-text" id="stat-top-theme">—</div>
+    <small id="stat-top-theme-count">Tema mais frequente na semana</small>
+  </div>
+
+  <div class="card">
+    <div class="label">TEMAS IDENTIFICADOS</div>
+    <div class="value" id="stat-theme-count">—</div>
+    <small>Na semana selecionada</small>
+  </div>
+
+  <div class="card">
+    <div class="label">PERÍODO ANALISADO</div>
+    <div class="value stat-text" id="stat-week">—</div>
+    <small id="stat-week-range">Semana ISO</small>
+  </div>
+
 </section>
 
 <h2>Distribuição dos principais ofensores</h2>
 
 <section class="charts">
-<div class="card">
-<h3>Ranking por quantidade de chamados</h3>
-<div id="bars"></div>
-</div>
 
-<div class="card">
-<h3>Participação dos temas</h3>
-<div id="legend"></div>
-</div>
+  <div class="card">
+    <h3>Ranking por quantidade de chamados</h3>
+    <div id="bars"></div>
+  </div>
+
+  <div class="card">
+    <h3>Participação dos temas</h3>
+    <div id="legend"></div>
+  </div>
+
 </section>
 
 <h2>Insights executivos</h2>
+
 <section class="insights">
-<div class="card insight">
-<strong>Criação de despesas</strong>
-<p>Maior concentração de dúvidas, com 33,3% dos chamados analisados.</p>
-</div>
-<div class="card insight" style="border-color:#0891b2">
-<strong>Gestão de despesas</strong>
-<p>Criação de despesas e prestação de contas representam 55,6% da amostra.</p>
-</div>
-<div class="card insight" style="border-color:#e28a32">
-<strong>Primeiro acesso</strong>
-<p>Dúvidas de acesso e utilização inicial indicam oportunidade de melhorar o onboarding.</p>
-</div>
+  <div class="card insight"><p>Carregando os dados da semana...</p></div>
 </section>
 
-<h2>Detalhamento dos chamados</h2>
-<div class="controls">
-<input id="busca" placeholder="Pesquisar chamado ou descrição..." oninput="render()">
-<select id="filtro" onchange="render()">
-<option value="">Todos os temas</option>
-<option>Criação de despesas</option>
-<option>Acesso e primeiro acesso</option>
-<option>Prestação de contas</option>
-<option>Recebimento de reembolso</option>
-</select>
-<button onclick="exportar()">Exportar CSV</button>
+<div class="table-heading">
+  <div>
+    <h2>Detalhamento dos chamados</h2>
+    <p>Consulte os registros e explore os temas da amostra.</p>
+  </div>
 </div>
 
+<div class="controls">
+
+  <select id="filtro">
+    <option value="">Todos os temas</option>
+  </select>
+
+  <input
+    id="busca"
+    placeholder="Pesquisar chamado ou descrição..."
+  >
+
+  <button id="btn-exportar-excel" type="button">Exportar planilha</button>
+  <button id="btn-exportar-pdf" type="button">Exportar PDF</button>
+  <span class="result-count" id="resultado-count" aria-live="polite"></span>
+
+</div>
+<p class="export-note">No Planilhas Google, use Arquivo &gt; Importar &gt; Fazer upload e selecione o .xlsx. O resumo, as cores e as abas são preservados.</p>
+
 <div class="table-wrap">
+
 <table>
+
 <thead>
 <tr>
-<th>Chamado</th>
-<th>Descrição</th>
-<th>Tema</th>
-<th>Jornada</th>
+  <th>Chamado</th>
+  <th>Descrição</th>
+  <th>Tema</th>
+  <th>Jornada</th>
+  <th>Data do chamado</th>
 </tr>
 </thead>
+
 <tbody id="tabela"></tbody>
+
 </table>
+
 </div>
 
 <p class="note">
-Classificação temática baseada nas descrições dos nove chamados fornecidos.
-Os resultados representam uma amostra inicial e não toda a operação Paytrack.
+  Os dados e o maior tema refletem a semana ISO selecionada. As importações são salvas no banco SQLite local.
 </p>
+
 </main>
 
-<footer>PAYTRACK · Análise interna de produto</footer>
+<footer>
+  PAYTRACK · ANÁLISE INTERNA DE PRODUTO
+</footer>
 
-<script>
-const dados=[
-[1790969,"Primeiro acesso ao sistema","Acesso e primeiro acesso","Onboarding"],
-[1792483,"Dúvida de prestação de contas","Prestação de contas","Gestão de despesas"],
-[1795766,"Usuário e senha desconhecidos","Acesso e primeiro acesso","Acesso"],
-[1803843,"Recebimento de reembolso","Recebimento de reembolso","Reembolso"],
-[1804612,"Recebimento de reembolso","Recebimento de reembolso","Reembolso"],
-[1805304,"Criação de despesas","Criação de despesas","Gestão de despesas"],
-[1862190,"Criação de despesas no primeiro acesso","Criação de despesas","Onboarding"],
-[1869494,"Criação de despesas no primeiro acesso","Criação de despesas","Onboarding"],
-[1895914,"Dúvida de prestação de contas","Prestação de contas","Gestão de despesas"]
-];
+<script src="script.js"></script>
 
-const cores=["#2879bd","#0891b2","#7257d5","#e28a32"];
-const temas=[
-"Criação de despesas",
-"Acesso e primeiro acesso",
-"Prestação de contas",
-"Recebimento de reembolso"
-];
-
-function contar(tema){
-return dados.filter(d=>d[2]===tema).length;
-}
-
-document.getElementById("bars").innerHTML=temas.map((t,i)=>`
-<div class="bar">
-<div class="bar-title">
-<strong>${t}</strong>
-<span>${contar(t)} chamados (${(contar(t)/9*100).toFixed(1)}%)</span>
-</div>
-<div class="track">
-<div class="fill" style="width:${contar(t)/9*100}%;background:${cores[i]}"></div>
-</div>
-</div>`).join("");
-
-document.getElementById("legend").innerHTML=temas.map((t,i)=>`
-<p style="font-size:13px">
-<span style="color:${cores[i]}">●</span>
-${t}: <strong>${contar(t)}</strong>
-</p>`).join("");
-
-function render(){
-const busca=document.getElementById("busca").value.toLowerCase();
-const filtro=document.getElementById("filtro").value;
-
-const filtrados=dados.filter(d=>
-(!filtro||d[2]===filtro)&&
-d.join(" ").toLowerCase().includes(busca)
-);
-
-document.getElementById("tabela").innerHTML=
-filtrados.map(d=>`
-<tr>
-<td><a href="https://atendimento-paytrack.zendesk.com/agent/tickets/${d[0]}" target="_blank">${d[0]}</a></td>
-<td>${d[1]}</td>
-<td>${d[2]}</td>
-<td>${d[3]}</td>
-</tr>`).join("")||
-'<tr><td colspan="4">Nenhum resultado encontrado.</td></tr>';
-}
-
-function exportar(){
-const linhas=[
-["Chamado","Descrição","Tema","Jornada"],
-...dados
-];
-const csv="\uFEFF"+linhas.map(l=>
-l.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")
-).join("\r\n");
-const link=document.createElement("a");
-link.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
-link.download="chamados_paytrack.csv";
-link.click();
-URL.revokeObjectURL(link.href);
-}
-
-render();
-</script>
 </body>
 </html>

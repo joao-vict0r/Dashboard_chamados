@@ -1,0 +1,12 @@
+{
+  "name": "paytrack-weekly-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard semanal de chamados com persistência SQLite",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
